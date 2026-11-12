@@ -12,7 +12,9 @@ cat > "$CMDS"
 N=$(wc -l < "$CMDS")
 [ "$N" -eq 0 ] && { echo "no commands"; exit 0; }
 VENV=${VENV:-$HOME/venvs/marl0}
-sbatch --parsable --job-name="$NAME" --partition=defq --cpus-per-task=1 --mem=4G \
+WAITFLAG=""
+[ "${WAIT:-0}" = 1 ] && WAITFLAG="--wait"
+sbatch --parsable $WAITFLAG --job-name="$NAME" --partition=defq --cpus-per-task=1 --mem=4G \
   --time="$TIME" --array=1-"$N"%"$MAXC" --output="slurm/%x_%A_%a.out" \
   --wrap="source $VENV/bin/activate && cd $PWD && eval \"\$(sed -n \${SLURM_ARRAY_TASK_ID}p $CMDS)\""
 echo "submitted $N tasks from $CMDS (max $MAXC concurrent)"

@@ -2,7 +2,7 @@
 # Print one shell command per job (skipping finished ones) for a Phase 0 stage.
 #   scripts/cmds.sh train   # env: TASKS METHODS SEEDS STEPS OUT
 #   scripts/cmds.sh eval    # eval critic + R/G curves for every finished run in OUT
-#   scripts/cmds.sh adv     # learned adversaries (reduced scope: spread, a0.3 + takeover)
+#   scripts/cmds.sh adv     # learned adversaries (full sweep: both tasks, PR/NR a0.1/0.3, one/all, + PR takeover)
 # Pipe the output to scripts/run_local.sh or scripts/slurm_array.sh.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -13,7 +13,7 @@ METHODS=${METHODS:-"maddpg m3ddpg ernie pr nr marta"}
 SEEDS=${SEEDS:-"0 1 2 3 4"}
 STEPS=${STEPS:-1500000}
 ADV_SEEDS=${ADV_SEEDS:-"0 1"}
-ADV_TASKS=${ADV_TASKS:-"spread"}
+ADV_TASKS=${ADV_TASKS:-"spread tag"}
 EXTRA=${EXTRA:-}
 
 case $STAGE in
@@ -34,7 +34,8 @@ adv)
     d=$(dirname "$done_f")
     t=$(basename "$d" | cut -d_ -f1)
     case " $ADV_TASKS " in *" $t "*) ;; *) continue ;; esac
-    for cell in "pr 0.3 one" "pr 0.3 all" "nr 0.3 one" "nr 0.3 all" "pr 1.0 one"; do
+    for cell in "pr 0.1 one" "pr 0.1 all" "pr 0.3 one" "pr 0.3 all" \
+                "nr 0.1 one" "nr 0.1 all" "nr 0.3 one" "nr 0.3 all" "pr 1.0 one"; do
       set -- $cell
       for as in $ADV_SEEDS; do
         [ -f "$d/adv/${1}_a${2}_${3}_s${as}.json" ] && continue
