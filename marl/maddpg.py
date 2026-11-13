@@ -196,7 +196,9 @@ class MADDPG:
 
             # ---- actor
             others = act.clone()
-            if m == "m3ddpg":
+            if m == "m3ddpg" and cfg.get("m3_actor", True):
+                # m3_actor=False matches the released TF code, whose actor loss is built
+                # from the unperturbed Q (the perturbed adv_q is computed but never used).
                 others = maal(self.critics[i], oc, others, i, cfg["m3_eps"])
             own = self.actors[i](obs[i])
             if m == "nr":
