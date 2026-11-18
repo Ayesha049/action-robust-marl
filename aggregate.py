@@ -30,11 +30,11 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from scipy.stats import kendalltau, spearmanr  # noqa: E402
 
-METHODS = ["maddpg", "m3ddpg", "ernie", "marta", "pr", "nr"]
-LABEL = {"maddpg": "MADDPG", "m3ddpg": "M3DDPG", "ernie": "ERNIE-A-c", "marta": "MARTA",
-         "pr": "PR-MADDPG", "nr": "NR-MADDPG"}
-COLOR = {"maddpg": "#4c4c4c", "m3ddpg": "#8c6bb1", "ernie": "#2ca02c", "marta": "#e6ab02",
-         "pr": "#1f77b4", "nr": "#d95f02"}
+METHODS = ["maddpg", "m3ddpg", "ernie", "mir3", "marta", "pr", "nr"]
+LABEL = {"maddpg": "MADDPG", "m3ddpg": "M3DDPG", "ernie": "ERNIE-A-c", "mir3": "MIR3",
+         "marta": "MARTA", "pr": "PR-MADDPG", "nr": "NR-MADDPG"}
+COLOR = {"maddpg": "#4c4c4c", "m3ddpg": "#8c6bb1", "ernie": "#2ca02c", "mir3": "#e7298a",
+         "marta": "#e6ab02", "pr": "#1f77b4", "nr": "#d95f02"}
 
 
 def boot_ci(x, n=10_000, seed=0):

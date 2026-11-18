@@ -44,6 +44,31 @@ class DiscreteQ(nn.Module):
         return self.net(x)
 
 
+class CLUB(nn.Module):
+    """CLUB upper bound on I(X; Y) with a Gaussian q(y|x) (Cheng et al. 2020).
+
+    Same as CLUBContinuous in the MIR3 release (DIG-Beihang/MIR3, agents/nets/club.py):
+    two one-hidden-layer nets of width hidden//2 give mu and a tanh-bounded log-variance.
+    """
+
+    def __init__(self, x_dim, y_dim, hidden=64):
+        super().__init__()
+        h = max(hidden // 2, 1)
+        self.p_mu = nn.Sequential(nn.Linear(x_dim, h), nn.ReLU(), nn.Linear(h, y_dim))
+        self.p_logvar = nn.Sequential(nn.Linear(x_dim, h), nn.ReLU(), nn.Linear(h, y_dim), nn.Tanh())
+
+    def forward(self, x, y):
+        """Per-sample bound: log q(y_i|x_i) - mean_j log q(y_j|x_i) (constants cancel)."""
+        mu, logvar = self.p_mu(x), self.p_logvar(x)
+        pos = -(mu - y) ** 2 / 2.0 / logvar.exp()
+        neg = -((y.unsqueeze(0) - mu.unsqueeze(1)) ** 2).mean(1) / 2.0 / logvar.exp()
+        return pos.sum(1) - neg.sum(1)
+
+    def learning_loss(self, x, y):
+        mu, logvar = self.p_mu(x), self.p_logvar(x)
+        return ((mu - y) ** 2 / logvar.exp() + logvar).sum(1).mean()
+
+
 def save_actor(actor, path):
     torch.save({"obs_dim": actor.obs_dim, "act_dim": actor.act_dim, "hidden": actor.hidden,
                 "state": actor.state_dict()}, path)

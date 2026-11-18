@@ -18,7 +18,8 @@ import pandas as pd
 from marl.attack import load_team, run_episode
 from marl.envs import make_env
 
-TUNED = {"m3ddpg": ["m3_eps"], "ernie": ["ernie_lam", "ernie_eps"], "marta": ["marta_cost"]}
+TUNED = {"m3ddpg": ["m3_eps"], "ernie": ["ernie_lam", "ernie_eps"], "marta": ["marta_cost"],
+         "mir3": ["mir3_lam"]}
 
 
 def main():

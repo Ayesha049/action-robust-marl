@@ -1,4 +1,4 @@
-"""Train a team on an MPE task with one of: maddpg m3ddpg ernie pr nr marta.
+"""Train a team on an MPE task with one of: maddpg m3ddpg ernie pr nr marta mir3.
 
 Writes runs/<task>__<method>__s<seed>/ with config.json, train_log.csv,
 actor_<i>.pt for each team agent, and DONE.
@@ -23,7 +23,7 @@ DEFAULTS = dict(hidden=64, lr_actor=1e-3, lr_critic=1e-3, gamma=0.95, tau=0.01, 
                 buffer=1_000_000, noise=0.1, learning_starts=25_000, update_every=25,
                 grad_steps=1, alpha=0.1, adv_ratio=None, m3_eps=0.01, ernie_lam=0.1,
                 ernie_eps=0.1, ernie_steps=3, marta_cost=0.5, sw_eps=0.1, shared_reward=True,
-                m3_actor=True)
+                m3_actor=True, mir3_lam=0.01, mir3_window=3000, mir3_batch=64)
 
 
 def parse():

@@ -18,6 +18,13 @@ marta   | MARTA-AC adaptation (Mguni et al. 2025): a Switcher (DQN over
         | {none, agent 1..N}, reward -r - c*1[fault]) picks which agent
         | malfunctions each step; that agent executes a learned worst-case
         | fault policy sigma_i (continuous replacement for softmax(-Q*)).
+mir3    | MIR3 (Li et al. 2023, TNNLS), as in the released code
+        | (DIG-Beihang/MIR3, learners/mir3_learner.py, learn_with_pmic): the
+        | critic target becomes r - lam * I_CLUB(s; a) + gamma Q'(s', a'), with
+        | s the global state (all observations) and a the taken joint action.
+        | The CLUB net q(a|s) is fitted (one Adam step, batch mir3_batch) to the
+        | most recent mir3_window transitions before every update. No adversary
+        | in training; the actor loss is unchanged.
 """
 
 import copy
@@ -26,9 +33,9 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from marl.nets import Actor, Critic, DiscreteQ, soft_update
+from marl.nets import CLUB, Actor, Critic, DiscreteQ, soft_update
 
-METHODS = ["maddpg", "m3ddpg", "ernie", "pr", "nr", "marta"]
+METHODS = ["maddpg", "m3ddpg", "ernie", "pr", "nr", "marta", "mir3"]
 
 
 class Replay:
@@ -52,6 +59,13 @@ class Replay:
 
     def __len__(self):
         return self.size if self.full else self.ptr
+
+    def sample_recent(self, b, window):
+        """(all obs concatenated, flattened joint action) from the last `window` transitions."""
+        w = min(window, len(self))
+        idx = (self.ptr - 1 - np.random.randint(0, w, b)) % self.size
+        oc = np.concatenate([o[idx] for o in self.obs], -1)
+        return torch.from_numpy(oc), torch.from_numpy(self.act[idx].reshape(b, -1))
 
     def sample(self, b):
         idx = np.random.randint(0, len(self), b)
@@ -111,6 +125,9 @@ class MADDPG:
             self.sw = DiscreteQ(sum(obs_dims), self.n + 1, h)
             self.sw_t = copy.deepcopy(self.sw)
             self.sw_opt = torch.optim.Adam(self.sw.parameters(), lr=cfg["lr_critic"])
+        if method == "mir3":
+            self.club = CLUB(sum(obs_dims), self.n * A, h)
+            self.club_opt = torch.optim.Adam(self.club.parameters(), lr=cfg["lr_critic"])
         self.actor_updates = 0
         self.stats = {}
 
@@ -177,12 +194,23 @@ class MADDPG:
         oc, oc2 = torch.cat(obs, -1), torch.cat(obs2, -1)
         r_all = team.unsqueeze(1).expand(-1, self.n) if cfg["shared_reward"] else rew
         a2 = self._target_actions(obs2)
-        do_actor = True
+        mi_pen = 0.0
+        if m == "mir3":
+            xs, ys = buf.sample_recent(cfg["mir3_batch"], cfg["mir3_window"])
+            club_loss = self.club.learning_loss(xs, ys)
+            self.club_opt.zero_grad()
+            club_loss.backward()
+            self.club_opt.step()
+            with torch.no_grad():
+                mi = self.club(oc, act.flatten(1)).unsqueeze(1)
+            mi_pen = cfg["mir3_lam"] * mi
+            self.stats.update({"mi": mi.mean().item(), "club_loss": club_loss.item()})
         for i in range(self.n):
             # ---- critic
             a2_i = maal(self.critics_t[i], oc2, a2, i, cfg["m3_eps"]) if m == "m3ddpg" else a2
             with torch.no_grad():
-                y = r_all[:, i:i + 1] + cfg["gamma"] * self.critics_t[i](oc2, a2_i.flatten(1))
+                y = (r_all[:, i:i + 1] - mi_pen
+                     + cfg["gamma"] * self.critics_t[i](oc2, a2_i.flatten(1)))
             q = self.critics[i](oc, act.flatten(1))
             c_loss = F.mse_loss(q, y)
             if m == "ernie":
