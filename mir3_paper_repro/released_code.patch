@@ -1,0 +1,83 @@
+diff --git a/agents/__init__.py b/agents/__init__.py
+index d49344b..125bfac 100644
+--- a/agents/__init__.py
++++ b/agents/__init__.py
+@@ -1,7 +1,10 @@
+ from .base_agents import BaseAgents
+ from .ddpg_agents import DDPGAgents
+ from .mir3_agents import MIR3Agents
+-from .romax_agents import ROMAXAgents
++try:  # repro patch: released code lacks MLPBase_relax/RNNBase_relax
++    from .romax_agents import ROMAXAgents
++except ImportError:
++    ROMAXAgents = None
+ 
+ REGISTRY = {
+     "ddpg": DDPGAgents, 
+diff --git a/configs/default.yaml b/configs/default.yaml
+index 7b9eaa5..fb2849c 100644
+--- a/configs/default.yaml
++++ b/configs/default.yaml
+@@ -1,8 +1,8 @@
+ # Hierarchical Configurations
+ token: "train"
+-device: "cuda:0"
++device: "cpu"
+ seed: 0
+-training_threads: 32
++training_threads: 1
+ evaluate: False
+ eval_type: "minq"
+ change_t: -1
+diff --git a/envs/__init__.py b/envs/__init__.py
+index 394e408..4aad4cb 100644
+--- a/envs/__init__.py
++++ b/envs/__init__.py
+@@ -1,8 +1,14 @@
+ from absl import flags
+ 
+-from .sc2.smac_wrapper import SMACWrapper
+-from .mujoco.mujoco_wrapper import MujocoWrapper
+ from .robots.robot_wrapper import RobotWrapper
++try:  # repro patch: SMAC/MuJoCo deps not installed
++    from .sc2.smac_wrapper import SMACWrapper
++except ImportError:
++    SMACWrapper = None
++try:
++    from .mujoco.mujoco_wrapper import MujocoWrapper
++except ImportError:
++    MujocoWrapper = None
+ 
+ FLAGS = flags.FLAGS
+ FLAGS(["main.py"])
+diff --git a/main.py b/main.py
+index deb5a13..d877988 100644
+--- a/main.py
++++ b/main.py
+@@ -67,6 +67,7 @@ if __name__ == "__main__":
+     parser.add_argument("--nr_agents", type=int, default=-1)
+     parser.add_argument("--actor_lr", type=float, default=-1.)
+     parser.add_argument("--critic_lr", type=float, default=-1.)
++    parser.add_argument("--total_timesteps", type=int, default=-1)  # repro patch
+     args = parser.parse_args()
+ 
+     config = get_config("default", "")
+@@ -104,6 +105,8 @@ if __name__ == "__main__":
+     
+     if args.seed:
+         config['seed'] = args.seed
++    if args.total_timesteps > 0:  # repro patch
++        config['total_timesteps'] = args.total_timesteps
+ 
+     if args.change_t >= 0:
+         config["change_t"] = args.change_t
+diff --git a/nni.py b/nni.py
+new file mode 100644
+index 0000000..7661366
+--- /dev/null
++++ b/nni.py
+@@ -0,0 +1,4 @@
++# repro patch: no-op stub for nni (hyperparameter-tuning reporter, unused outside NNI)
++def report_intermediate_result(*a, **k): pass
++def report_final_result(*a, **k): pass
++def get_next_parameter(): return {}
