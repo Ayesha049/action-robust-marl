@@ -28,7 +28,7 @@ DEFAULTS = dict(hidden=64, lr_actor=1e-3, lr_critic=1e-3, gamma=0.95, tau=0.01, 
 
 def parse():
     p = argparse.ArgumentParser()
-    p.add_argument("--task", choices=["spread", "tag"], default="spread")
+    p.add_argument("--task", choices=["spread", "tag", "transport"], default="spread")
     p.add_argument("--method", choices=METHODS, default="maddpg")
     p.add_argument("--mode", choices=["team", "all"], default="team",
                    help="'all' also controls the prey (only for pre-training the tag prey)")

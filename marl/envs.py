@@ -7,13 +7,17 @@ it exactly: a = [0, (-f_x)+, (f_x)+, (-f_y)+, (f_y)+].
 Tasks
 -----
 spread : simple_spread_v3, N=3 cooperative agents. Team = all agents.
+transport : VMAS transport (vmas 1.5.2), 4 agents push one package (mass 50) to a goal.
+         Fixed horizon of TRANSPORT_STEPS; VMAS's done (package on goal) is ignored, as reward is
+         0 while the package stays on the goal. Action f in [-1,1]^2 is passed as the VMAS force
+         (u_range 1, u_multiplier 0.6). Team reward = the shared shaped reward.
 tag    : simple_tag_v3, 3 predators ("adversary_*") vs 1 prey ("agent_0").
          Team = predators. The prey is driven by a frozen policy (or controlled
          by the learner when mode="all", used only to pre-train the prey).
 """
 
 import numpy as np
-from mpe2 import simple_spread_v3, simple_tag_v3
+from mpe2 import simple_spread_v3, simple_tag_v3  # noqa: E402
 
 MAX_CYCLES = 25
 
@@ -79,7 +83,49 @@ class TeamEnv:
         self.env.close()
 
 
+TRANSPORT_STEPS = 100
+
+
+class VmasTeamEnv:
+    """VMAS scenario with one environment, exposing the TeamEnv interface."""
+
+    def __init__(self, scenario, n_agents=4, steps=TRANSPORT_STEPS):
+        import torch
+        import vmas
+        self._torch = torch
+        self.task, self.steps = scenario, steps
+        self.env = vmas.make_env(scenario, num_envs=1, device="cpu", continuous_actions=True,
+                                 seed=0, n_agents=n_agents)
+        self.n = self.n_team = n_agents
+        self.controlled = self.team = [f"agent_{i}" for i in range(n_agents)]
+        self.obs_dims = [int(s.shape[0]) for s in self.env.observation_space]
+        self.act_dim = 2
+        self.t = 0
+
+    def _np(self, obs):
+        return [o[0].numpy().astype(np.float32) for o in obs]
+
+    def reset(self, seed=None):
+        if seed is not None:
+            self.env.seed(seed)
+        self.t = 0
+        return self._np(self.env.reset())
+
+    def step(self, actions):
+        acts = [self._torch.as_tensor(np.clip(actions[i], -1, 1), dtype=self._torch.float32)
+                .unsqueeze(0) for i in range(self.n)]
+        obs, rews, _, _ = self.env.step(acts)
+        self.t += 1
+        r = np.array([float(x[0]) for x in rews], np.float32)
+        return self._np(obs), r, float(r.mean()), self.t >= self.steps
+
+    def close(self):
+        pass
+
+
 def make_env(task, mode="team", prey_path=None):
+    if task == "transport":
+        return VmasTeamEnv("transport")
     prey = None
     if task == "tag" and mode == "team":
         from marl.nets import load_actor
