@@ -11,13 +11,14 @@ KINDS=${KINDS:-"residual blind rec ft"}
 OUT=${OUT:-runs_phase2/stage1}
 JOBS=${JOBS:-56}
 PY=${PY:-$HOME/miniconda3/envs/marl0/bin/python}
+EXTRA=${EXTRA:-}  # extra train_fault.py arguments, e.g. "--track 1"
 mkdir -p $OUT/logs
 log() { echo "[$(date '+%F %T')] $*"; }
 eps() { [ $1 = tag ] && echo 500 || echo 100; }
 : > $OUT/train.cmds
 for t in $TASKS; do for s in $SEEDS; do for k in $KINDS; do
   d=$OUT/$t/${k}__s$s
-  echo "$PY -m phase2.train_fault --base-dir runs/${t}__maddpg__s$s --kind $k --seed $s --out $d > $OUT/logs/train_${t}_${k}_s$s.log 2>&1" >> $OUT/train.cmds
+  echo "$PY -m phase2.train_fault --base-dir runs/${t}__maddpg__s$s --kind $k --seed $s --out $d $EXTRA > $OUT/logs/train_${t}_${k}_s$s.log 2>&1" >> $OUT/train.cmds
 done; done; done
 log "training $(wc -l < $OUT/train.cmds) runs"
 xargs -P $JOBS -I{} bash -c "{}" < $OUT/train.cmds

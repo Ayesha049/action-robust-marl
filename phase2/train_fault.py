@@ -16,7 +16,9 @@ Critic: Q(s_t, executed joint action, c_t) with privileged context c_t = [M_t, b
 agent (zero offsets and identity when clean). Target uses clip(M_{t+1} mu'_{t+1} + b_{t+1}).
 Actor (agent i): maximise Q with agent i's executed action recomputed through the fault channel
 from its current command, the others' executed actions from replay; plus c_r ||mu_i - mu_b,i||^2
-on clean episodes.
+on clean episodes; plus (--track > 0, run 3 on) lambda_track ||clip(M mu_i + b) - mu_b,i||^2 on
+every step: the executed action should track the base's intended action. It uses the same
+privileged fault parameters as the critic, so it is training-only; execution is unchanged.
 
 Kinds:
   residual  RC: frozen base + gated, bounded GRU residual over [o, a_{t-1}, a~_{t-1}, mu_b];
@@ -115,6 +117,8 @@ def main():
     p.add_argument("--beta-warmup", type=int, default=8_000)
     p.add_argument("--beta", type=float, default=1.0)
     p.add_argument("--c-r", type=float, default=1.0)
+    p.add_argument("--track", type=float, default=0.0,
+                   help="intent-tracking weight: lambda_track ||C(a) - mu_b||^2 (run 3: 1.0)")
     p.add_argument("--space", choices=["pre", "action"], default="action",
                    help="residual head: Phase 1 pre-tanh, or action space (run 2 on, 2026-11-22)")
     p.add_argument("--res-scale", type=float, default=2.0, help="action-space residual bound")
@@ -230,7 +234,10 @@ def main():
                     joint = torch.cat([e[:, :, :i], own.unsqueeze(2), e[:, :, i + 1:]], 2)
                     qa = critic(oc[:, :T], torch.cat([joint.reshape(B, T, -1), cx[:, :T]], -1))
                     pen = (cl.view(B, 1) * (mu - mu_b).pow(2).sum(-1)).sum() / (cl.sum() * T + 1e-8)
-                    loss = -qa.mean() + a.c_r * pen
+                    # intent tracking (run 3 on): the executed action should match the base's
+                    # intended action, through the privileged fault channel (training only)
+                    track = (own - mu_b).pow(2).sum(-1).mean() if a.track > 0 else 0.0
+                    loss = -qa.mean() + a.c_r * pen + a.track * track
                     a_opt[i].zero_grad()
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(actors[i].trainable(), 0.5)
