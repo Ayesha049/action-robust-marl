@@ -96,9 +96,14 @@ def run_episode(env, team, attack, seed, pert_seed):
 
 
 def load_team(run_dir, n):
+    """Team policy in actuator units: a base trained with act_cap c returns c * actor(o)."""
+    import json
+    import os
     from marl.nets import load_actor
     actors = [load_actor(f"{run_dir}/actor_{i}.pt") for i in range(n)]
+    cfg_path = os.path.join(run_dir, "config.json")
+    cap = float(json.load(open(cfg_path)).get("act_cap", 1.0)) if os.path.exists(cfg_path) else 1.0
 
     def team(obs):
-        return np.stack([p(o) for p, o in zip(actors, obs)]).astype(np.float32)
+        return (cap * np.stack([p(o) for p, o in zip(actors, obs)])).astype(np.float32)
     return team

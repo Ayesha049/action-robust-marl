@@ -37,6 +37,8 @@ def parse():
     p.add_argument("--out-dir", default="runs")
     p.add_argument("--run-name", default=None)
     p.add_argument("--prey", default="assets/tag_prey.pt")
+    p.add_argument("--act-cap", type=float, default=1.0,
+                   help="Phase 2 reserved authority: team actions scaled by this before the actuator")
     for k, v in DEFAULTS.items():
         if isinstance(v, bool):
             p.add_argument(f"--{k.replace('_', '-')}", type=lambda s: s.lower() in ("1", "true", "yes"),
@@ -77,7 +79,7 @@ def main():
     with open(os.path.join(out, "config.json"), "w") as f:
         json.dump(meta, f, indent=2)
 
-    env = make_env(a.task, mode=a.mode, prey_path=a.prey)
+    env = make_env(a.task, mode=a.mode, prey_path=a.prey, act_cap=a.act_cap)
     agent = MADDPG(env.obs_dims, a.method, cfg, rng)
     buf = Replay(a.buffer, env.obs_dims, env.n, env.act_dim)
 

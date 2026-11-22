@@ -13,6 +13,7 @@ Cells (spread, n = 3):
   drift  eta in {0.01, 0.02, 0.04}   victims: each single agent
   stuck                              victims: each single agent (predictor none only)
   wdir   bias |b| 0.3, 8 fixed directions x each single agent (worst-direction grid)
+  rot    theta in {30, 60, 90, 180} degrees  victims: each single agent, and all (opt-in kind)
 
 Writes <out>/<label>__<kinds>.csv. Use --kinds to split one team across several jobs.
 """
@@ -29,8 +30,9 @@ from marl.attack import load_team
 from marl.envs import make_env
 from phase2.faults import Fault, oracle_command
 
-STRENGTHS = {"gain": (0.7, 0.5, 0.3), "bias": (0.1, 0.3, 0.5), "drift": (0.01, 0.02, 0.04)}
-KIND_ID = {"clean": 0, "gain": 1, "bias": 2, "drift": 3, "stuck": 4, "wdir": 5}
+STRENGTHS = {"gain": (0.7, 0.5, 0.3), "bias": (0.1, 0.3, 0.5), "drift": (0.01, 0.02, 0.04),
+             "rot": (30.0, 60.0, 90.0, 180.0)}
+KIND_ID = {"clean": 0, "gain": 1, "bias": 2, "drift": 3, "stuck": 4, "wdir": 5, "rot": 6}
 
 
 def cells_for(kind, n):
@@ -38,7 +40,7 @@ def cells_for(kind, n):
     singles = [(f"a{j}", [j]) for j in range(n)]
     if kind == "clean":
         return [("clean", None, 0.0, "all", [], None)]
-    if kind in ("gain", "bias"):
+    if kind in ("gain", "bias", "rot"):
         return [(kind, kind, s, sc, v, None) for s in STRENGTHS[kind]
                 for sc, v in singles + [("all", list(range(n)))]]
     if kind == "drift":

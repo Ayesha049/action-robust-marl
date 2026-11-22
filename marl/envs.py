@@ -14,6 +14,11 @@ transport : VMAS transport (vmas 1.5.2), 4 agents push one package (mass 50) to 
 tag    : simple_tag_v3, 3 predators ("adversary_*") vs 1 prey ("agent_0").
          Team = predators. The prey is driven by a frozen policy (or controlled
          by the learner when mode="all", used only to pre-train the prey).
+
+act_cap (Phase 2 reserved authority): the team's actions in [-1,1] are scaled by act_cap before
+they reach the actuator, which still accepts [-1,1]. A base trained with act_cap c therefore
+uses at most c of the actuator range, leaving 1 - c for a correction. marl.attack.load_team
+returns actions in actuator units (c * actor(o)), so evaluation runs with act_cap 1.
 """
 
 import numpy as np
@@ -35,8 +40,8 @@ class TeamEnv:
     step(actions) -> obs, rewards (per controlled agent), team_reward, done
     """
 
-    def __init__(self, task, mode="team", prey_policy=None):
-        self.task = task
+    def __init__(self, task, mode="team", prey_policy=None, act_cap=1.0):
+        self.task, self.act_cap = task, float(act_cap)
         if task == "spread":
             self.env = simple_spread_v3.parallel_env(N=3, max_cycles=MAX_CYCLES,
                                                      continuous_actions=True)
@@ -67,7 +72,8 @@ class TeamEnv:
         return [obs[a].astype(np.float32) for a in self.controlled]
 
     def step(self, actions):
-        act = {a: force_to_mpe(actions[i]) for i, a in enumerate(self.controlled)}
+        act = {a: force_to_mpe(np.clip(actions[i], -1, 1) * (self.act_cap if a in self.team else 1.0))
+               for i, a in enumerate(self.controlled)}
         for a in self.others:
             if a not in act:
                 act[a] = force_to_mpe(self.prey_policy(self._obs[a]))
@@ -123,11 +129,12 @@ class VmasTeamEnv:
         pass
 
 
-def make_env(task, mode="team", prey_path=None):
+def make_env(task, mode="team", prey_path=None, act_cap=1.0):
     if task == "transport":
+        assert act_cap == 1.0, "act_cap is implemented for the MPE tasks only"
         return VmasTeamEnv("transport")
     prey = None
     if task == "tag" and mode == "team":
         from marl.nets import load_actor
         prey = load_actor(prey_path or "assets/tag_prey.pt")
-    return TeamEnv(task, mode=mode, prey_policy=prey)
+    return TeamEnv(task, mode=mode, prey_policy=prey, act_cap=act_cap)
