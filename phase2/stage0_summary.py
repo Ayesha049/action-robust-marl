@@ -24,7 +24,7 @@ import os
 import numpy as np
 import pandas as pd
 
-J_RAND = {"spread": -26.08, "tag": 1.05}  # Phase 0 random-team returns
+J_RAND = {"spread": -26.08, "tag": 1.05, "transport_m10": 0.0}  # random-team returns
 TEAM = ["task", "method", "seed"]
 
 
@@ -41,6 +41,7 @@ def main():
     p.add_argument("--dir", default="phase2/stage0_out")
     p.add_argument("--threshold", type=float, default=0.05)
     p.add_argument("--rule-kinds", default="gain,bias", help="fault kinds the stop rule covers")
+    p.add_argument("--base-method", default="maddpg", help="method the stop rule reads")
     p.add_argument("--phase1-stage0", default="",
                    help="dir of Phase 1 Stage 0 CSVs, to check clean returns reproduce")
     a = p.parse_args()
@@ -128,10 +129,10 @@ def main():
 
     task = "+".join(sorted(df.task.unique()))
     rule = a.rule_kinds.split(",")
-    mad = gains[(gains.method == "maddpg") & gains.kind.isin(rule)]
+    mad = gains[(gains.method == a.base_method) & gains.kind.isin(rule)]
     best = mad.loc[mad.gain_exact.idxmax()]
     go = (mad.gain_exact >= a.threshold).any()
-    print(f"\nSTOP RULE ({task}): max MADDPG exact-oracle gain on {'/'.join(rule)} cells = "
+    print(f"\nSTOP RULE ({task}): max {a.base_method} exact-oracle gain on {'/'.join(rule)} cells = "
           f"{best.gain_exact:.3f} ({best.kind} {best.strength} {best.scope}; threshold "
           f"{a.threshold}) -> {'GO' if go else f'STOP ({task} arm)'}")
 

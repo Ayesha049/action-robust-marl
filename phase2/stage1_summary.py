@@ -23,7 +23,7 @@ import os
 import numpy as np
 import pandas as pd
 
-J_RAND = {"spread": -26.08, "tag": 1.05}
+J_RAND = {"spread": -26.08, "tag": 1.05, "transport_m10": 0.0}
 COMPARE = [("residual", "maddpg"), ("residual", "rec"), ("residual", "blind"), ("residual", "ft"),
            ("rec", "maddpg")]
 

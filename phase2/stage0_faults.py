@@ -27,7 +27,7 @@ import numpy as np
 import torch
 
 from marl.envs import make_env
-from phase2.faults import Fault, oracle_command
+from phase2.faults import ONSET_BY_TASK, ONSET_MAX, Fault, oracle_command
 from phase2.teams import load_any
 
 STRENGTHS = {"gain": (0.7, 0.5, 0.3), "bias": (0.1, 0.3, 0.5), "drift": (0.01, 0.02, 0.04),
@@ -103,7 +103,8 @@ def main():
                     "predictor", "episode", "onset", "return", "clip_share"])
         for kind in kinds:
             for ci, (label, fk, s, scope, victims, d) in enumerate(cells_for(kind, n)):
-                fault = Fault(fk, s, victims, n, direction=d) if fk else None
+                fault = (Fault(fk, s, victims, n, direction=d,
+                               onset_max=ONSET_BY_TASK.get(cfg["task"], ONSET_MAX)) if fk else None)
                 cell_preds = ["none"] if fk in (None, "stuck") else preds
                 for pred in cell_preds:
                     for e in range(a.episodes):

@@ -23,17 +23,20 @@ predictors face the same onsets and parameters (common random numbers).
 import numpy as np
 
 KINDS = ("gain", "bias", "drift", "stuck", "rot")
-ONSET_MAX = 12  # onset t0 ~ U{0, ..., 12} in a 25-step spread episode
+ONSET_MAX = 12  # onset t0 ~ U{0, ..., 12} in a 25-step MPE episode
+# per-task onset window, the same relative window (about the first half of the episode);
+# MPE tasks keep ONSET_MAX (decision 2026-11-22)
+ONSET_BY_TASK = {"transport_m10": 144}
 
 
 class Fault:
-    def __init__(self, kind, strength, victims, n, direction=None):
+    def __init__(self, kind, strength, victims, n, direction=None, onset_max=ONSET_MAX):
         assert kind in KINDS
         self.kind, self.strength, self.victims, self.n = kind, float(strength), list(victims), n
-        self.direction = direction
+        self.direction, self.onset_max = direction, onset_max
 
     def sample(self, rng):
-        t0 = int(rng.integers(0, ONSET_MAX + 1))
+        t0 = int(rng.integers(0, self.onset_max + 1))
         theta = rng.uniform(0, 2 * np.pi, self.n)
         stuck = rng.uniform(-1, 1, (self.n, 2)).astype(np.float32)
         if self.direction is not None:

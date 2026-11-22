@@ -11,6 +11,8 @@ EPISODES=${EPISODES:-100}
 RUNS=${RUNS:-runs}  # directory holding <task>__<method>__s<seed> checkpoints
 KINDS=${KINDS:-"clean gain bias drift stuck wdir"}
 RULE=${RULE:-gain,bias}
+ORACLE_METHODS=${ORACLE_METHODS:-"maddpg pr"}  # methods evaluated with every oracle predictor
+BASE_METHOD=${BASE_METHOD:-maddpg}            # the method the stop rule reads
 OUT=${OUT:-runs_phase2/stage0}
 JOBS=${JOBS:-32}
 SEEDS=${SEEDS:-"0 1 2 3 4"}
@@ -25,7 +27,7 @@ for s in $SEEDS; do
   for m in $METHODS; do
     d=$RUNS/${TASK}__${m}__s$s
     if [ ! -f $d/actor_0.pt ]; then log "missing $d, skipped"; continue; fi
-    if [ $m = maddpg ] || [ $m = pr ]; then
+    if [[ " $ORACLE_METHODS " == *" $m "* ]]; then
       for k in $KINDS; do
         echo "$PY -m phase2.stage0_faults --run-dir $d --out $OUT --episodes $EPISODES --kinds $k ${STRENGTHS:+--strengths \"$STRENGTHS\"} > $OUT/logs/${TASK}_${m}_s${s}_$k.log 2>&1" >> $OUT/jobs.cmds
       done
@@ -37,6 +39,6 @@ done
 log "launching $(wc -l < $OUT/jobs.cmds) jobs on $JOBS workers"
 xargs -P $JOBS -I{} bash -c "{}" < $OUT/jobs.cmds
 log "jobs done: $(ls $OUT/*.csv 2>/dev/null | wc -l) CSVs; errors in: $(grep -l -i error $OUT/logs/*.log 2>/dev/null | wc -l) logs"
-$PY -m phase2.stage0_summary --dir $OUT --rule-kinds $RULE --phase1-stage0 ${P1S0:-runs_phase1/stage0} > $OUT/summary_printout.txt 2>&1
+$PY -m phase2.stage0_summary --dir $OUT --rule-kinds $RULE --base-method $BASE_METHOD --phase1-stage0 ${P1S0:-runs_phase1/stage0} > $OUT/summary_printout.txt 2>&1
 log "summary written to $OUT/summary_printout.txt"
 touch $OUT/DONE
