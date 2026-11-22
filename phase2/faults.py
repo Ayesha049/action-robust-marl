@@ -108,3 +108,22 @@ def oracle_command(fault, ep, t, a_star, predictor):
         clipped += int((np.abs(raw) > 1).sum())
         cmd[j] = np.clip(raw, -1, 1)
     return cmd, clipped, 2 * len(fault.victims)
+
+
+def affine(fault, ep, t):
+    """Every fault kind as exe_j = clip(M_j cmd_j + b_j) at step t: (M (n, 2, 2), b (n, 2)).
+    Identity and zero before the onset and for non-victims (and for fault None)."""
+    n = fault.n if fault else 0
+    M = np.tile(np.eye(2, dtype=np.float32), (n, 1, 1))
+    b = np.zeros((n, 2), np.float32)
+    if fault is None or t < ep["t0"]:
+        return M, b
+    g, bb = fault.params(ep, t)
+    for j in fault.victims:
+        if fault.kind == "stuck":
+            M[j], b[j] = 0.0, ep["stuck"][j]
+        elif fault.kind == "rot":
+            M[j] = fault.rotation(ep, j)
+        else:
+            M[j], b[j] = g[j] * np.eye(2, dtype=np.float32), bb[j]
+    return M, b

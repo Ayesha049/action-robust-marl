@@ -90,18 +90,23 @@ class TeamEnv:
 
 
 TRANSPORT_STEPS = 100
+# Phase 2 variant (decision 2026-11-22): at mass 50 even an idealised pusher delivers in 0-1% of
+# 100-step episodes, so the Transport arm uses a lighter package and a longer horizon.
+VMAS_TASKS = {"transport": dict(scenario="transport", steps=100, kwargs={}),
+              "transport_m10": dict(scenario="transport", steps=300, kwargs={"package_mass": 10})}
 
 
 class VmasTeamEnv:
     """VMAS scenario with one environment, exposing the TeamEnv interface."""
 
-    def __init__(self, scenario, n_agents=4, steps=TRANSPORT_STEPS):
+    def __init__(self, task, n_agents=4):
         import torch
         import vmas
         self._torch = torch
-        self.task, self.steps = scenario, steps
-        self.env = vmas.make_env(scenario, num_envs=1, device="cpu", continuous_actions=True,
-                                 seed=0, n_agents=n_agents)
+        spec = VMAS_TASKS[task]
+        self.task, self.steps = task, spec["steps"]
+        self.env = vmas.make_env(spec["scenario"], num_envs=1, device="cpu", continuous_actions=True,
+                                 seed=0, n_agents=n_agents, **spec["kwargs"])
         self.n = self.n_team = n_agents
         self.controlled = self.team = [f"agent_{i}" for i in range(n_agents)]
         self.obs_dims = [int(s.shape[0]) for s in self.env.observation_space]
@@ -130,9 +135,9 @@ class VmasTeamEnv:
 
 
 def make_env(task, mode="team", prey_path=None, act_cap=1.0):
-    if task == "transport":
+    if task in VMAS_TASKS:
         assert act_cap == 1.0, "act_cap is implemented for the MPE tasks only"
-        return VmasTeamEnv("transport")
+        return VmasTeamEnv(task)
     prey = None
     if task == "tag" and mode == "team":
         from marl.nets import load_actor

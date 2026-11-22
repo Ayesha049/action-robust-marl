@@ -53,10 +53,16 @@ def base_pre(base, x):
 class ResidualActor(nn.Module):
     recurrent = True
 
-    def __init__(self, base, hidden=64, gate_bias=0.0, fast=False, train_base=False):
+    def __init__(self, base, hidden=64, gate_bias=0.0, fast=False, train_base=False,
+                 space="pre", res_scale=1.0):
         super().__init__()
         self.base = base
         self.fast, self.train_base = fast, train_base
+        # space "pre": Phase 1 form, mu = tanh(u_b + g beta tanh(D)).
+        # space "action" (Phase 2, 2026-11-22): mu = clip(tanh(u_b) + g beta res_scale tanh(D)),
+        # so every action in the box is reachable however saturated the base is (res_scale 2).
+        assert space in ("pre", "action")
+        self.space, self.res_scale = space, float(res_scale)
         d = base.obs_dim + 6 + (3 if fast else 0)
         self.inp = nn.Linear(d, hidden)
         self.gru = nn.GRUCell(hidden, hidden)
@@ -99,7 +105,10 @@ class ResidualActor(nn.Module):
         hh = self.gru(F.relu(self.inp(x)), hh)
         gl = self.gate(hh) + (self.gate_m(m) if self.fast else 0.0)
         g = torch.sigmoid(gl)
-        mu = torch.tanh(u_b + g * beta * torch.tanh(self.delta(hh)))
+        if self.space == "action":
+            mu = (torch.tanh(u_b) + g * beta * self.res_scale * torch.tanh(self.delta(hh))).clamp(-1, 1)
+        else:
+            mu = torch.tanh(u_b + g * beta * torch.tanh(self.delta(hh)))
         h = torch.cat([hh, m], -1) if self.fast else hh
         return mu, ref, g, h
 
@@ -175,13 +184,13 @@ class ResMLPActor(nn.Module):
 KINDS = ("residual", "ft", "rcfast", "rec", "resmlp")
 
 
-def make_actor(kind, base, hidden=64):
+def make_actor(kind, base, hidden=64, space="pre", res_scale=1.0):
     if kind == "residual":
-        return ResidualActor(base, hidden)
+        return ResidualActor(base, hidden, space=space, res_scale=res_scale)
     if kind == "rcfast":
         return ResidualActor(base, hidden, fast=True)
     if kind == "rec":
-        return ResidualActor(base, hidden, train_base=True)
+        return ResidualActor(base, hidden, train_base=True, space=space, res_scale=res_scale)
     if kind == "resmlp":
         return ResMLPActor(base, hidden)
     if kind == "ft":
@@ -256,7 +265,8 @@ def load_team_any(run_dir, n):
         actors = []
         for i in range(n):
             base = load_base(os.path.join(bdir, f"actor_{i}.pt"))
-            a = make_actor(d["kind"], base, d["hidden"])
+            a = make_actor(d["kind"], base, d["hidden"], d.get("space", "pre"),
+                           d.get("res_scale", 1.0))
             a.load_state_dict(d["actors"][i])
             a.eval()
             actors.append(a)

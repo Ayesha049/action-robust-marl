@@ -20,13 +20,13 @@ import time
 import numpy as np
 import torch
 
-from marl.envs import TRANSPORT_STEPS
+from marl.envs import VMAS_TASKS
 from marl.mappo import MAPPO
 from marl.nets import save_actor
 
 DEFAULTS = dict(hidden=256, lr=5e-5, clip=0.2, epochs=45, minibatch=4096, gamma=0.99, lam=0.9,
                 ent_coef=0.0, vf_coef=1.0, max_grad=1.0, init_log_std=0.0, n_envs=600,
-                horizon=TRANSPORT_STEPS, n_agents=4, threads=4)
+                n_agents=4, threads=4)
 
 
 def git_sha():
@@ -40,7 +40,7 @@ def git_sha():
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--task", choices=["transport", "balance"], default="transport")
+    p.add_argument("--task", choices=sorted(VMAS_TASKS), default="transport")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--steps", type=int, default=24_000_000, help="total env frames (all envs)")
     p.add_argument("--out-dir", default="runs")
@@ -54,8 +54,10 @@ def main():
     torch.manual_seed(a.seed)
 
     import vmas
-    env = vmas.make_env(a.task, num_envs=a.n_envs, device="cpu", continuous_actions=True,
-                        seed=a.seed, n_agents=a.n_agents)
+    spec = VMAS_TASKS[a.task]
+    a.horizon = spec["steps"]
+    env = vmas.make_env(spec["scenario"], num_envs=a.n_envs, device="cpu", continuous_actions=True,
+                        seed=a.seed, n_agents=a.n_agents, **spec["kwargs"])
     n = a.n_agents
     obs_dim = int(env.observation_space[0].shape[0])
     algo = MAPPO(n, obs_dim, 2, a.hidden, a.lr, a.clip, a.epochs, a.minibatch, a.gamma, a.lam,
@@ -92,7 +94,7 @@ def main():
         frames += T * E
         episodes += E
         it += 1
-        delivered = (o[:, 0, 10] > 0.5).float().mean().item() if a.task == "transport" else float("nan")
+        delivered = (o[:, 0, 10] > 0.5).float().mean().item() if a.task.startswith("transport") else float("nan")
         log.writerow([frames, episodes, round(R.sum(0).mean().item(), 4), round(delivered, 4),
                       round(algo.std().mean().item(), 4), *[round(float(x), 5) for x in stats],
                       round(T * E / (time.time() - t0), 1)])

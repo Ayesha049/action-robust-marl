@@ -26,9 +26,9 @@ import os
 import numpy as np
 import torch
 
-from marl.attack import load_team
 from marl.envs import make_env
 from phase2.faults import Fault, oracle_command
+from phase2.teams import load_any
 
 STRENGTHS = {"gain": (0.7, 0.5, 0.3), "bias": (0.1, 0.3, 0.5), "drift": (0.01, 0.02, 0.04),
              "rot": (30.0, 60.0, 90.0, 180.0)}
@@ -56,15 +56,18 @@ def episode(env, team, fault, predictor, ep_seed, rng_key):
     rng = np.random.default_rng(rng_key)
     ep = fault.sample(rng) if fault else None
     obs = env.reset(seed=ep_seed)
+    team.reset()
     total, done, t, clipped, corrected = 0.0, False, 0, 0, 0
     while not done:
-        a_star = team(obs)
+        a_star = team.act(obs)
+        cmd = a_star
         if fault:
             cmd, c, k = oracle_command(fault, ep, t, a_star, predictor)
             clipped, corrected = clipped + c, corrected + k
             exe = fault.execute(ep, t, cmd)
         else:
             exe = a_star
+        team.observe(cmd, exe)
         obs, _, team_r, done = env.step(exe)
         total += team_r
         t += 1
@@ -88,11 +91,12 @@ def main():
     cfg = json.load(open(os.path.join(a.run_dir, "config.json")))
     env = make_env(cfg["task"])
     n = env.n_team
-    team = load_team(a.run_dir, n)
+    team = load_any(a.run_dir, n)  # Phase 0 (stateless) or trained Phase 1/2 (recurrent) team
+    seed = cfg.get("base_seed", cfg["seed"])  # trained teams are labelled by their base's seed
     preds = a.predictors.split(",")
     kinds = a.kinds.split(",")
     os.makedirs(a.out, exist_ok=True)
-    path = os.path.join(a.out, f"{cfg['task']}__{cfg['method']}__s{cfg['seed']}__{'-'.join(kinds)}.csv")
+    path = os.path.join(a.out, f"{cfg['task']}__{cfg['method']}__s{seed}__{'-'.join(kinds)}.csv")
     with open(path + ".tmp", "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["task", "method", "seed", "kind", "strength", "scope", "direction",
@@ -107,7 +111,7 @@ def main():
                         # onsets and directions across predictors, methods, strengths and scopes
                         key = [2026, KIND_ID[label], 9 if d is None else d, e]
                         ret, t0, cs = episode(env, team, fault, pred, 100_000 + e, key)
-                        w.writerow([cfg["task"], cfg["method"], cfg["seed"], label, s, scope,
+                        w.writerow([cfg["task"], cfg["method"], seed, label, s, scope,
                                     "" if d is None else d, pred, e, t0, round(ret, 4),
                                     "" if np.isnan(cs) else round(cs, 4)])
     os.replace(path + ".tmp", path)
