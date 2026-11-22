@@ -37,24 +37,17 @@ def boot(x, n=10_000, seed=0):
     return tuple(np.percentile(m, [2.5, 97.5]))
 
 
-def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--dirs", nargs="+", required=True)
-    p.add_argument("--out", required=True)
-    p.add_argument("--task", required=True)
-    a = p.parse_args()
-    files = [f for d in a.dirs for f in glob.glob(os.path.join(d, f"{a.task}__*.csv*"))]
+def paired_table(dirs, task):
+    """Per (method, seed, kind, strength, scope) rho on the base scale, victim fixed by the base."""
+    files = [f for d in dirs for f in glob.glob(os.path.join(d, f"{task}__*.csv*"))]
     df = pd.concat(pd.read_csv(f) for f in files)
-    df = df[(df.predictor == "none") & (df.task == a.task)]
+    df = df[(df.predictor == "none") & (df.task == task)]
     df["direction"] = df.direction.fillna(-1)
-    methods = sorted(df.method.unique())
     cell = ["kind", "strength", "scope", "direction"]
     m = df.groupby(["method", "seed"] + cell)["return"].mean().reset_index()
     j0 = m[(m.method == "maddpg") & (m.kind == "clean")].set_index("seed")["return"]
-    jr = J_RAND[a.task]
+    jr = J_RAND[task]
     m["rho"] = (m["return"] - jr) / (m.seed.map(j0) - jr)
-
-    # fix the victim per (seed, kind, strength, family) by the base's worst case
     rows = []
     base = m[m.method == "maddpg"]
     for (seed, kind, s), g in base.groupby(["seed", "kind", "strength"]):
@@ -69,8 +62,18 @@ def main():
                     (m.scope == pick.scope) & (m.direction == pick.direction)]
             for _, r in sel.iterrows():
                 rows.append(dict(method=r.method, seed=seed, kind=kind, strength=s, scope=fam,
-                                 rho=r.rho))
-    t = pd.DataFrame(rows)
+                                 rho=r.rho, ret=r["return"], J0=j0[seed]))
+    return pd.DataFrame(rows)
+
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--dirs", nargs="+", required=True)
+    p.add_argument("--out", required=True)
+    p.add_argument("--task", required=True)
+    a = p.parse_args()
+    t = paired_table(a.dirs, a.task)
+    methods = sorted(t.method.unique())
     w = t.pivot_table(index=["seed", "kind", "strength", "scope"], columns="method",
                       values="rho").reset_index()
     out = []
